@@ -1,0 +1,23 @@
+flat_mode: true
+enable_pillars: true
+enable_plate: true
+
+general_options:
+  height_per_stroke: 130
+  parts_per_stroke_unit: 14
+  distance_between_parts: 1
+  distance_between_strokes: 0
+  thickness: 90
+  stretch: 160
+  centering_method: 'box' # 'average_medians' or 'box'
+
+flat_mode_options:
+  spacing: 7
+
+plate_options:
+  height: 50
+  overlap: -50
+
+pillar_options:
+  thickness: 20
+  insert_margin: 3

@@ -1,0 +1,2 @@
+debug_options:
+  plot_voronoi: true

@@ -1,0 +1,74 @@
+# Scale of the part (max size = scale * 60x60mm)
+# (also available as CLI option)
+scale: 1
+# Parts to generate, necessary when generating strokes / plate,pillars separately
+# (also available as CLI option)
+parts: ["strokes", "plate", "pillars", "connectors", "debug"]
+
+# Draw connectors between the tail of a stroke and the head of the next stroke
+enable_connectors: false
+# Draw a pillar underneath each stroke and make an insert on the underside of each stroke
+enable_pillars: false
+# Draw a round plate underneath the structure
+enable_plate: false
+# Space the heads of each stroke evenly
+flat_mode: false
+# Extrude the strokes to the plate
+to_bottom_mode: false
+# Calculate average tilt and undo it
+untilted_mode: false
+
+general_options:
+  height_per_stroke: 100
+  # How many parts to divide a stroke unit in
+  parts_per_stroke_unit: 15
+  # When not in flat mode, Z distance between head and tail of strokes
+  distance_between_strokes: 0
+  # Extrusion height of each stroke
+  thickness: 90
+  # Slope of each stroke
+  stretch: 160
+  # XY-centering: 'box' takes the center from the character data
+  # 'average_medians' recalculates the center
+  centering_method: "box"
+  # Smoothen the curve to improve splitting into parts
+  smoothen_curve: false
+  smoothen_curve_smoothness: 10
+
+untilted_options:
+  # For untilting, bottom detection is not perfect yet, so adjust the margin here
+  bottom_margin: 70
+  # Draw original and untilted axes
+  debug_axis: false
+
+connector_options:
+  # Force the connectors to be parallel to the XY plane
+  force_horizontal: false
+  # Diameter of each connector
+  thickness: 20
+  # Distance to the head/tail of the stroke relative to the stroke length
+  end_distance: 0.1
+  # Circular segments for the connector, 4 for a square connector
+  n_segments: 20
+
+flat_mode_options:
+  # In flat mode, space between head of stroke and head of next stroke
+  spacing: 5
+
+plate_options:
+  # Height of the plate
+  height: 50
+  # Z-distance lowest stroke can be sunk in the plate
+  overlap: 0
+
+pillar_options:
+  # Diameter of each pillar
+  thickness: 20
+  # Margin between insert on pillar and insert in stroke (for 3D printing)
+  insert_margin: 3
+  # Circular segments of an insert, 4 for square, 6 for hexagon
+  insert_n_segments: 4
+
+debug_options:
+  # Debug voronoi and strokes using matplotlib
+  plot_voronoi: false

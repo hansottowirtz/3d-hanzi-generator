@@ -1,0 +1,6 @@
+enable_connectors: true
+
+connector_options:
+  force_horizontal: true
+  thickness: 20
+  end_distance: 0.1

@@ -1,0 +1,11 @@
+flat_mode: true
+to_bottom_mode: true
+enable_plate: true
+# Calculate average tilt and undo it
+untilted_mode: true
+
+flat_mode_options:
+  spacing: 15
+
+# untilted_options:
+#   debug_axis: true
