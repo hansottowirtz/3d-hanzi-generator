@@ -1,0 +1,42 @@
+character: 珍
+parts:
+  - strokes
+  - pillars
+  - plate
+flat_mode: true
+enable_pillars: true
+enable_plate: true
+
+general_options:
+  height_per_stroke: 130
+  parts_per_stroke_unit: 14
+  distance_between_parts: 1
+  distance_between_strokes: 0
+  thickness: 90
+  stretch: 160
+  centering_method: 'box' # 'average_medians' or 'box'
+
+flat_mode_options:
+  spacing: 7
+
+plate_options:
+  height: 30
+  overlap: -30
+
+pillar_options:
+  thickness: 17
+  insert_multiplier: 0.8
+  insert_margin: 3
+  insert_angle: 0
+  pillar_end_distance: 0.35
+
+per_stroke_options:
+  0:
+    pillar_options:
+      pillar_end_distance: 0.65
+  1:
+    enable_pillars: false
+    general_options:
+      thickness: 200
+  2:
+    enable_pillars: false

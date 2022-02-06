@@ -1,3 +1,6 @@
+# Character
+# (also available as CLI option)
+character: 好
 # Scale of the part (max size = scale * 60x60mm)
 # (also available as CLI option)
 scale: 1
@@ -34,6 +37,8 @@ general_options:
   # Smoothen the curve to improve splitting into parts
   smoothen_curve: false
   smoothen_curve_smoothness: 10
+  # Ensure overlap between parts for 3d model
+  part_offset: 1
 
 untilted_options:
   # For untilting, bottom detection is not perfect yet, so adjust the margin here
@@ -68,7 +73,15 @@ pillar_options:
   insert_margin: 3
   # Circular segments of an insert, 4 for square, 6 for hexagon
   insert_n_segments: 4
+  # Angle at which the pillar insert intersects the stroke
+  insert_angle: 45
+  # Ratio of insert size to pillar thickness
+  insert_multiplier: 1.2 # sqrt(2)
+  # Distance to the head/tail of the stroke relative to the stroke length
+  pillar_end_distance: 0.5
 
 debug_options:
   # Debug voronoi and strokes using matplotlib
   plot_voronoi: false
+
+per_stroke_options: {}

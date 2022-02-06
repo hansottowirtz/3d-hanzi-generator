@@ -21,6 +21,7 @@ from solid import (
     color,
     rotate,
     scale,
+    offset,
 )
 from solid.utils import (
     down,
@@ -41,10 +42,16 @@ from matplotlib.axes import SubplotBase
 from math import sqrt
 from sklearn.decomposition import PCA
 import pdb
+from copy import deepcopy
+from deepmerge import Merger
 
 root = pathlib_Path(__file__).parent.resolve()
 line_module = import_scad(root.joinpath("line.scad"))
 rod_module = import_scad(root.joinpath("rod.scad"))
+
+config_merger = Merger(
+    [(list, "override"), (dict, "merge"), (set, "union")], ["override"], ["override"]
+)
 
 
 def spt_char_point_to_tuple_point(p):
@@ -93,6 +100,7 @@ def generate_stroke(
     extrude_thickness: float,
     debug_voronoi: bool,
     plot_ax: SubplotBase,
+    part_offset: float,
 ):
     ps: Sequence[Point2] = []
 
@@ -154,7 +162,9 @@ def generate_stroke(
             voronoi_idx = voronoi_idx - 1
             # i2 = len(org_voronoi_ps) - 2
         ps = [vor.vertices[idx] for idx in region]
-        vor_obj = up(-thickness / 2)(linear_extrude(extrude_thickness)(polygon(ps)))
+        # offset polygons with 1 unit to ensure overlap
+        offset_polygon = offset(part_offset)(polygon(ps))
+        vor_obj = up(-thickness / 2)(linear_extrude(extrude_thickness)(offset_polygon))
         p_src = Point3(
             voronoi_ps[voronoi_idx][0], voronoi_ps[voronoi_idx][1], -(z_next - z) / 2
         )
@@ -243,40 +253,61 @@ def smoothen_curve(points: Sequence[Tuple[float, float]]):
     return points
 
 
-def generate(config: dict):
-    character: str = config["character"]
-    parts: Sequence[str] = config["parts"]
-    thickness: float = config["general_options"]["thickness"]
-    stretch: float = config["general_options"]["stretch"]
-    parts_per_stroke_unit: float = config["general_options"]["parts_per_stroke_unit"]
-    config_smoothen_curve: bool = config["general_options"]["smoothen_curve"]
-    smoothen_curve_smoothness: float = config["general_options"]["smoothen_curve_smoothness"]
-    flat_mode: bool = config["flat_mode"]
-    flat_mode_spacing: float = config["flat_mode_options"]["spacing"]
-    distance_between_strokes: float = config["general_options"][
-        "distance_between_strokes"
-    ]
-    enable_connectors: bool = config["enable_connectors"]
-    connector_end_distance: float = config["connector_options"]["end_distance"]
-    force_horizontal_connectors: bool = config["connector_options"]["force_horizontal"]
-    connector_thickness: float = config["connector_options"]["thickness"]
-    connector_n_segments: int = config["connector_options"]["n_segments"]
-    untilted_mode: bool = config["untilted_mode"]
-    enable_untilted_axis: bool = config["untilted_options"]["debug_axis"]
-    centering_method: str = config["general_options"]["centering_method"]
-    to_bottom_mode: bool = config["to_bottom_mode"]
-    plate_overlap: float = config["plate_options"]["overlap"]
-    enable_pillars: bool = config["enable_pillars"]
-    plate_height: float = config["plate_options"]["height"]
-    enable_plate: bool = config["enable_plate"]
-    pillar_thickness: float = config["pillar_options"]["thickness"]
-    pillar_insert_margin: float = config["pillar_options"]["insert_margin"]
-    pillar_insert_n_segments: float = config["pillar_options"]["insert_n_segments"]
-    config_scale: float = config["scale"]
-    debug_voronoi: bool = config["debug_options"]["plot_voronoi"]
-    untilted_mode_bottom_margin: float = config["untilted_options"]["bottom_margin"]
+class Config:
+    def __init__(self, config: dict):
+        self.character: str = config["character"]
+        self.parts: Sequence[str] = config["parts"]
+        self.thickness: float = config["general_options"]["thickness"]
+        self.stretch: float = config["general_options"]["stretch"]
+        self.parts_per_stroke_unit: float = config["general_options"][
+            "parts_per_stroke_unit"
+        ]
+        self.config_smoothen_curve: bool = config["general_options"]["smoothen_curve"]
+        self.smoothen_curve_smoothness: float = config["general_options"][
+            "smoothen_curve_smoothness"
+        ]
+        self.part_offset: float = config["general_options"]["part_offset"]
+        self.flat_mode: bool = config["flat_mode"]
+        self.flat_mode_spacing: float = config["flat_mode_options"]["spacing"]
+        self.distance_between_strokes: float = config["general_options"][
+            "distance_between_strokes"
+        ]
+        self.enable_connectors: bool = config["enable_connectors"]
+        self.connector_end_distance: float = config["connector_options"]["end_distance"]
+        self.force_horizontal_connectors: bool = config["connector_options"][
+            "force_horizontal"
+        ]
+        self.connector_thickness: float = config["connector_options"]["thickness"]
+        self.connector_n_segments: int = config["connector_options"]["n_segments"]
+        self.untilted_mode: bool = config["untilted_mode"]
+        self.enable_untilted_axis: bool = config["untilted_options"]["debug_axis"]
+        self.centering_method: str = config["general_options"]["centering_method"]
+        self.to_bottom_mode: bool = config["to_bottom_mode"]
+        self.plate_overlap: float = config["plate_options"]["overlap"]
+        self.enable_pillars: bool = config["enable_pillars"]
+        self.plate_height: float = config["plate_options"]["height"]
+        self.enable_plate: bool = config["enable_plate"]
+        self.pillar_thickness: float = config["pillar_options"]["thickness"]
+        self.pillar_insert_margin: float = config["pillar_options"]["insert_margin"]
+        self.pillar_insert_n_segments: float = config["pillar_options"][
+            "insert_n_segments"
+        ]
+        self.pillar_insert_angle: float = config["pillar_options"]["insert_angle"]
+        self.pillar_insert_multiplier: float = config["pillar_options"][
+            "insert_multiplier"
+        ]
+        self.pillar_end_distance: float = config["pillar_options"][
+            "pillar_end_distance"
+        ]
+        self.scale: float = config["scale"]
+        self.debug_voronoi: bool = config["debug_options"]["plot_voronoi"]
+        self.untilted_mode_bottom_margin: float = config["untilted_options"][
+            "bottom_margin"
+        ]
 
-    extrude_thickness = 5000 if config["to_bottom_mode"] else thickness
+
+def generate(config_dict: dict):
+    root_config = Config(config_dict)
 
     graphics_file = open(root.joinpath("../res/graphics.txt"), "r")
     character_data = {}
@@ -286,8 +317,22 @@ def generate(config: dict):
         if len(c) == 0:
             continue
         character_data = json.loads(line)
-        if character_data["character"] == character:
+        if character_data["character"] == root_config.character:
             break
+
+    number_of_strokes = len(character_data["medians"])
+    stroke_configs = [
+        (
+            Config(
+                config_merger.merge(
+                    deepcopy(config_dict), config_dict["per_stroke_options"][i]
+                )
+            )
+            if i in config_dict["per_stroke_options"]
+            else root_config
+        )
+        for i in range(number_of_strokes)
+    ]
 
     strokes = cube(0)
     plate = cube(0)
@@ -304,17 +349,23 @@ def generate(config: dict):
     stroke_lengths = [calculate_stroke_length(medians) for medians in stroke_medians]
 
     stroke_part_counts = [
-        ceil(parts_per_stroke_unit * stroke_length / (0.5 * 1024))
+        ceil(root_config.parts_per_stroke_unit * stroke_length / (0.5 * 1024))
         for stroke_length in stroke_lengths
     ]
 
     # simplify curve by removing points, then smoothen resulting curve
-    if config_smoothen_curve:
+    if root_config.config_smoothen_curve:
         stroke_medians = [
             smoothen_curve(
                 interpolate_equidistant_medians(
                     stroke_medians[i],
-                    max(ceil(stroke_lengths[i] / (smoothen_curve_smoothness * 50)), 3)
+                    max(
+                        ceil(
+                            stroke_lengths[i]
+                            / (root_config.smoothen_curve_smoothness * 50)
+                        ),
+                        3,
+                    ),
                 )
             )
             for i in range(len(stroke_medians))
@@ -324,7 +375,8 @@ def generate(config: dict):
         interpolate_equidistant_medians(
             stroke_medians[i],
             stroke_part_counts[i],
-        ) for i in range(len(stroke_medians))
+        )
+        for i in range(len(stroke_medians))
     ]
 
     print(stroke_lengths, stroke_part_counts)
@@ -341,14 +393,15 @@ def generate(config: dict):
     # pdb.set_trace()
     # height_multiplier = height_per_stroke + distance_between_strokes - thickness
     medians_3d: Sequence[Sequence[Point3]] = []
-    avg_part_stretch = stretch / parts_per_stroke_unit
+    avg_part_stretch = root_config.stretch / root_config.parts_per_stroke_unit
     stroke_zs = np.cumsum(
         [0]
         + [
             (
-                i * flat_mode_spacing
-                if flat_mode
-                else parts_count * avg_part_stretch + distance_between_strokes
+                i * root_config.flat_mode_spacing
+                if root_config.flat_mode
+                else parts_count * avg_part_stretch
+                + root_config.distance_between_strokes
             )
             for (
                 i,
@@ -363,7 +416,7 @@ def generate(config: dict):
     )
 
     plot_axes: list[SubplotBase] = None
-    if debug_voronoi:
+    if root_config.debug_voronoi:
         n_strokes = len(stroke_paths_medians_lengths_counts)
         nrows = 2 if n_strokes <= 6 else 3
         ncols = ceil(n_strokes / nrows)
@@ -375,21 +428,26 @@ def generate(config: dict):
     for i, (stroke_path, stroke_medians, _, parts_count) in enumerate(
         stroke_paths_medians_lengths_counts
     ):
+        stroke_config = stroke_configs[i]
         part_z_fn = lambda i, l: i * avg_part_stretch
-        plot_ax = plot_axes[i] if debug_voronoi else None
+        plot_ax = plot_axes[i] if stroke_config.debug_voronoi else None
+        extrude_thickness = (
+            5000 if root_config.to_bottom_mode else stroke_config.thickness
+        )
         stroke_obj = generate_stroke(
             stroke_path,
             stroke_medians,
             part_z_fn,
-            thickness,
+            stroke_config.thickness,
             extrude_thickness,
-            debug_voronoi,
+            stroke_config.debug_voronoi,
             plot_ax,
+            stroke_config.part_offset,
         )
-        if debug_voronoi:
+        if stroke_config.debug_voronoi:
             xs, ys = zip(*orig_stroke_medians[i])
-            plot_ax.plot(xs, ys, 'ro', markersize=2)
-        stroke_z = stroke_zs[i] + thickness / 2
+            plot_ax.plot(xs, ys, "ro", markersize=2)
+        stroke_z = stroke_zs[i] + stroke_config.thickness / 2
         medians_3d.append(
             list(
                 map(
@@ -404,27 +462,30 @@ def generate(config: dict):
         )
         strokes += up(stroke_z)(stroke_obj)
 
-    if debug_voronoi:
+    if root_config.debug_voronoi:
         plt.tight_layout()
         plt.show()
 
-    if enable_connectors:
+    if root_config.enable_connectors:
         for i, (medians1, medians2) in enumerate(pairwise(medians_3d)):
-            p1_inset = floor(connector_end_distance * len(medians1))
-            p2_inset = floor(connector_end_distance * len(medians2))
+            p1_inset = floor(root_config.connector_end_distance * len(medians1))
+            p2_inset = floor(root_config.connector_end_distance * len(medians2))
             p1 = medians1[-(p1_inset + 1)]
             p2 = medians2[p2_inset]
-            if force_horizontal_connectors:
+            if root_config.force_horizontal_connectors:
                 avg_z = (p1.z + p2.z) / 2
                 p1 = p1.copy()
                 p1.z = avg_z
                 p2 = p2.copy()
                 p2.z = avg_z
             connectors += line_module.line(
-                p1, p2, connector_thickness, segments=connector_n_segments
+                p1,
+                p2,
+                root_config.connector_thickness,
+                segments=root_config.connector_n_segments,
             )
 
-    if untilted_mode:
+    if root_config.untilted_mode:
         arr = np.array(flat(medians_3d))
         pca = PCA()
         pca.fit(arr)
@@ -460,7 +521,7 @@ def generate(config: dict):
         # obj += color('blue')(sphere(30))
         # mat = np.matmul(mat, [[1, 0, 0, 0], [0, 1, 0, 0], [0.3, 0, 1, 0], [0, 0, 0, 1]])
 
-        if enable_untilted_axis:
+        if root_config.enable_untilted_axis:
             for i, eigenvector in enumerate(eigenvectors):
                 c = "pink" if i == 0 else ("lightgreen" if i == 1 else "lightblue")
                 debug += multmatrix(mat)(
@@ -475,9 +536,9 @@ def generate(config: dict):
         ]
 
     medians_max_z = max(*[p[2] for p in flat(medians_3d)])
-    if untilted_mode:
-        medians_max_z = medians_max_z + untilted_mode_bottom_margin
-    bottom = medians_max_z + thickness / 2
+    if root_config.untilted_mode:
+        medians_max_z = medians_max_z + root_config.untilted_mode_bottom_margin
+    bottom = medians_max_z + root_config.thickness / 2
 
     strokes = up(-bottom)(strokes)
     connectors = up(-bottom)(connectors)
@@ -486,77 +547,89 @@ def generate(config: dict):
         [median + Point3(0, 0, -bottom) for median in medians] for medians in medians_3d
     ]
 
-    if centering_method == "average_medians":
+    if root_config.centering_method == "average_medians":
         center = Point3(*tuple(map(np.mean, zip(*flat(medians_3d)))))
         strokes = translate((-center[0], -center[1], 0))(strokes)
 
-    if to_bottom_mode:
+    if root_config.to_bottom_mode:
         cube_height = 3000
         strokes = intersection()(
             strokes,
             down(cube_height / 2 - 1)(cube((1024, 1024, cube_height), center=True)),
         )
 
-    plate_z = -plate_overlap
-    if enable_pillars:
-        for i, medians in enumerate(medians_3d):
-            p = medians[floor(len(medians) / 2)]
-            p_prev = medians[max(0, floor(len(medians) / 2) - 1)]
-            p_next = medians[min(len(medians) - 1, floor(len(medians) / 2) + 1)]
-            direction = p_next - p_prev
-            # pdb.set_trace()
-            # debug += color('red')(line_module.line(p, p + rico * 10, 20))
-            angle = np.arctan2(direction.y, direction.x) * 180 / pi
-            insert_height = thickness * 3
-            insert_insertion = thickness * 0.4
-            pillar_insert_end_p = p + (0, 0, (thickness / 2) - insert_insertion)
-            pillar_cone_start_p = pillar_insert_end_p + (0, 0, insert_insertion + 5)
-            pillar = rod_module.line(
-                pillar_cone_start_p,
-                (p.x, p.y, plate_z + plate_height / 2),
-                pillar_thickness,
-            )
-            pillar += rod_module.cone(
-                pillar_cone_start_p,
-                pillar_insert_end_p,
-                pillar_thickness,
-                pillar_thickness / 2,
-            )
-            insert_segment_count = pillar_insert_n_segments
-            insert_multiplier = 1.2  # sqrt(2)
-            insert_angle = angle + 45 - 30 if insert_segment_count == 6 else angle
+    plate_z = -root_config.plate_overlap
+    for i, medians in enumerate(medians_3d):
+        stroke_config = stroke_configs[i]
+        if not stroke_config.enable_pillars:
+            continue
+        medians_index = floor(stroke_config.pillar_end_distance * len(medians))
+        p = medians[medians_index]
+        p_prev = medians[max(0, medians_index - 1)]
+        p_next = medians[min(len(medians) - 1, medians_index + 1)]
+        direction = p_next - p_prev
+        # pdb.set_trace()
+        # debug += color('red')(line_module.line(p, p + rico * 10, 20))
+        angle = np.arctan2(direction.y, direction.x) * 180 / pi
+        insert_height = stroke_config.thickness * 3
+        insert_insertion = stroke_config.thickness * 0.4
+        pillar_insert_end_p = p + (
+            0,
+            0,
+            (stroke_config.thickness / 2) - insert_insertion,
+        )
+        pillar_cone_start_p = pillar_insert_end_p + (0, 0, insert_insertion + 5)
+        pillar = rod_module.line(
+            pillar_cone_start_p,
+            (p.x, p.y, plate_z + root_config.plate_height / 2),
+            stroke_config.pillar_thickness,
+        )
+        pillar += rod_module.cone(
+            pillar_cone_start_p,
+            pillar_insert_end_p,
+            stroke_config.pillar_thickness,
+            stroke_config.pillar_thickness / 2,
+        )
+        insert_segment_count = stroke_config.pillar_insert_n_segments
+        insert_angle = (
+            angle + stroke_config.pillar_insert_angle - 30
+            if insert_segment_count == 6
+            else angle + stroke_config.pillar_insert_angle - 45
+        )
 
-            def extrude_insert(surface):
-                return translate(pillar_insert_end_p)(
-                    rotate((0, 0, insert_angle))(linear_extrude(insert_height)(surface))
-                )
+        def extrude_insert(surface):
+            return translate(pillar_insert_end_p)(
+                rotate((0, 0, insert_angle))(linear_extrude(insert_height)(surface))
+            )
 
-            insert = extrude_insert(
-                circle(
-                    pillar_thickness * insert_multiplier, segments=insert_segment_count
-                )
+        insert = extrude_insert(
+            circle(
+                stroke_config.pillar_thickness * stroke_config.pillar_insert_multiplier,
+                segments=insert_segment_count,
             )
-            insert_cutout = extrude_insert(
-                circle(
-                    pillar_thickness * insert_multiplier + pillar_insert_margin,
-                    segments=insert_segment_count,
-                )
+        )
+        insert_cutout = extrude_insert(
+            circle(
+                stroke_config.pillar_thickness * stroke_config.pillar_insert_multiplier
+                + stroke_config.pillar_insert_margin,
+                segments=insert_segment_count,
             )
-            insert = intersection()(insert, strokes)
-            pillars += pillar + insert
-            pillars_cutouts += pillar + insert_cutout
+        )
+        insert = intersection()(insert, strokes)
+        pillars += pillar + insert
+        pillars_cutouts += pillar + insert_cutout
 
     strokes -= pillars_cutouts
 
-    if enable_plate:
+    if root_config.enable_plate:
         r1 = 512
         r2 = 80
-        plate += up(plate_z + plate_height / 2)(
-            cylinder(r=r1 + r2, h=plate_height, center=True)
+        plate += up(plate_z + root_config.plate_height / 2)(
+            cylinder(r=r1 + r2, h=root_config.plate_height, center=True)
         )
 
     obj = cube(0)
-    for part in parts:
+    for part in root_config.parts:
         part_obj = {
             "strokes": strokes,
             "plate": plate,
@@ -566,7 +639,7 @@ def generate(config: dict):
         }[part]
         obj += part_obj
 
-    return scale(config_scale * 60 / 1024)(rotate((-180, 0, 0))(obj))
+    return scale(root_config.scale * 60 / 1024)(rotate((-180, 0, 0))(obj))
 
 
 def find_openscad():
@@ -595,7 +668,7 @@ def find_openscad():
 if __name__ == "__main__":
     from argparse import ArgumentParser
     import yaml
-    from deepmerge import always_merger
+    from time import time
 
     parser = ArgumentParser("character_generator")
     parser.add_argument("--character", help="Hanzi", type=str)
@@ -624,7 +697,7 @@ if __name__ == "__main__":
     with open(base_config_path, "r") as file:
         base_config = yaml.load(file, Loader=yaml.FullLoader)
 
-    config = always_merger.merge(base_config, config)
+    config = config_merger.merge(base_config, config)
 
     if args.parts is not None:
         config["parts"] = args.parts.split(",")
@@ -638,15 +711,21 @@ if __name__ == "__main__":
     a = generate(config)
 
     header = "$fn = 40;"
+    base_filename_parts = (
+        config["character"],
+        str(round(time())),
+        "-".join(config["parts"]),
+    )
+    base_filename = "-".join(base_filename_parts)
     scad_filepath = (
         args.out_scad
         if args.out_scad is not None
-        else out_dir + "/" + args.character + ".scad"
+        else out_dir + "/" + base_filename + ".scad"
     )
     stl_filepath = (
         args.out_stl
         if args.out_stl is not None
-        else out_dir + "/" + args.character + ".stl"
+        else out_dir + "/" + base_filename + ".stl"
     )
     file_out = scad_render_to_file(
         a, filepath=scad_filepath, file_header=header, include_orig_code=False
