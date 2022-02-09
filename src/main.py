@@ -108,12 +108,9 @@ def generate_stroke(
         for i in [0, 0.25, 0.5, 0.75]:
             p = spt_char_point_to_tuple_point(segment.point(i))
             ps.append(p)
-    poly = polygon(ps)
+    char_poly = polygon(ps)
 
     obj = union()
-    char_obj = color([0, 0, 1])(
-        up(-thickness / 2)(linear_extrude(extrude_thickness)(poly))
-    )
 
     org_voronoi_ps = part_medians
     # create boundaries for voronoi regions (ensure all regions within the 1024x1024 square are finite)
@@ -164,7 +161,7 @@ def generate_stroke(
         ps = [vor.vertices[idx] for idx in region]
         # offset polygons with 1 unit to ensure overlap
         offset_polygon = offset(part_offset)(polygon(ps))
-        vor_obj = up(-thickness / 2)(linear_extrude(extrude_thickness)(offset_polygon))
+        part_obj = up(-thickness / 2)(linear_extrude(extrude_thickness)(intersection()(offset_polygon, char_poly)))
         p_src = Point3(
             voronoi_ps[voronoi_idx][0], voronoi_ps[voronoi_idx][1], -(z_next - z) / 2
         )
@@ -208,7 +205,6 @@ def generate_stroke(
         #     obj += color([1, 0, 0])(multmatrix(mmat)(cube(100, center=True)))
         # l_obj = line_module.line(p_src, p_dst, 4)
         # obj += color([1, 0, 0])(multmatrix(line_mat)(translate(-middle_p)(l_obj)) + l_obj)
-        part_obj = intersection()(char_obj, vor_obj)
         prog = region_idx / len(regions)
         col = (prog, 1 - prog / 2, 1 - prog)
         obj += up(z)(color(col)(tf(part_obj)))
