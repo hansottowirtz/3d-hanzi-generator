@@ -3,7 +3,6 @@ enable_pillars: true
 enable_plate: true
 
 general_options:
-  height_per_stroke: 130
   parts_per_stroke_unit: 14
   distance_between_parts: 1
   distance_between_strokes: 0

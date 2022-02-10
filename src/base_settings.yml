@@ -22,7 +22,6 @@ to_bottom_mode: false
 untilted_mode: false
 
 general_options:
-  height_per_stroke: 100
   # How many parts to divide a stroke unit in
   parts_per_stroke_unit: 15
   # When not in flat mode, Z distance between head and tail of strokes
@@ -81,7 +80,12 @@ pillar_options:
   pillar_end_distance: 0.5
 
 debug_options:
+  enable_plot: false
   # Debug voronoi and strokes using matplotlib
   plot_voronoi: false
+  plot_medians: false
+  plot_stroke: false
+  plot_orig_medians: false
+  plot_zoom: 1
 
 per_stroke_options: {}

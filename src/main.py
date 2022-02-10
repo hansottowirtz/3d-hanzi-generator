@@ -98,17 +98,27 @@ def generate_stroke(
     part_z: lambda x, l: int,
     thickness: float,
     extrude_thickness: float,
-    debug_voronoi: bool,
-    plot_ax: SubplotBase,
     part_offset: float,
+    **kwargs,
 ):
+    debug_enable_plot: bool = kwargs.get("debug_enable_plot")
+    debug_plot_voronoi: bool = kwargs.get("debug_plot_voronoi")
+    debug_plot_stroke: bool = kwargs.get("debug_plot_stroke")
+    debug_plot_medians: bool = kwargs.get("debug_plot_medians")
+    debug_plot_ax: SubplotBase = kwargs.get("debug_plot_ax")
+    debug_plot_zoom: int = kwargs.get("debug_plot_zoom")
+    stroke_index: int = kwargs.get("stroke_index")
+    t: float = kwargs.get("t")
+    t_purpose: Sequence[str] = kwargs.get("t_purpose")
+
     ps: Sequence[Point2] = []
 
     for segment in stroke_path:
-        for i in [0, 0.25, 0.5, 0.75]:
+        # take 4 samples from each segment
+        for i in np.linspace(0, 1, 4, endpoint=False):
             p = spt_char_point_to_tuple_point(segment.point(i))
             ps.append(p)
-    char_poly = polygon(ps)
+    char_polygon = polygon(ps)
 
     obj = union()
 
@@ -122,17 +132,22 @@ def generate_stroke(
         *org_voronoi_ps,
     ]
     vor = Voronoi(voronoi_ps)
-
-    if debug_voronoi:
-        voronoi_plot_2d(vor, ax=plot_ax)
-        ps2 = ps.copy()
-        ps2.append(ps2[0])
-        xs_stroke, ys_stroke = zip(*ps2)
-        plot_ax.plot(xs_stroke, ys_stroke, "g-")
-        xs_medians, ys_medians = zip(*part_medians)
-        plot_ax.plot(xs_medians, ys_medians, "b-")
-        plot_ax.set_xlim([-512, 512])
-        plot_ax.set_ylim([-512, 512])
+    if debug_enable_plot:
+        if debug_plot_voronoi:
+            voronoi_plot_2d(vor, ax=debug_plot_ax)
+        if debug_plot_stroke:
+            ps2 = ps.copy()
+            ps2.append(ps2[0])
+            xs_stroke, ys_stroke = zip(*ps2)
+            debug_plot_ax.plot(xs_stroke, ys_stroke, "g-")
+        if debug_plot_medians:
+            xs_medians, ys_medians = zip(*part_medians)
+            debug_plot_ax.plot(xs_medians, ys_medians, "bo", markersize=2)
+        lim = 512 * debug_plot_zoom
+        # character data is y-inverted, so invert the y-axis as well
+        debug_plot_ax.set_xlim([-lim, lim])
+        debug_plot_ax.set_ylim([lim, -lim])
+        debug_plot_ax.title.set_text(f"Stroke {stroke_index}")
 
     # start from 3 to skip the boundary-ensuring points
     regions = {
@@ -151,6 +166,10 @@ def generate_stroke(
 
         z = part_z(region_idx, len(regions))
         z_next = part_z(region_idx + 1, len(regions))
+        shear_t = t if 'shear' in t_purpose else 1
+        z_next = (z_next * shear_t) + (z * (1 - shear_t))
+
+        delta_z = z_next - z
 
         # print('r_i: {}, v_i: {}, z: {}, rs: {}'.format(region_idx, voronoi_idx, z, len(regions)))
         # keep_angle = i == len(voronoi_ps) - 1
@@ -161,24 +180,28 @@ def generate_stroke(
         ps = [vor.vertices[idx] for idx in region]
         # offset polygons with 1 unit to ensure overlap
         offset_polygon = offset(part_offset)(polygon(ps))
-        part_obj = up(-thickness / 2)(linear_extrude(extrude_thickness)(intersection()(offset_polygon, char_poly)))
+        part_obj = up(-thickness / 2)(
+            linear_extrude(extrude_thickness)(intersection()(offset_polygon, char_polygon))
+        )
         p_src = Point3(
-            voronoi_ps[voronoi_idx][0], voronoi_ps[voronoi_idx][1], -(z_next - z) / 2
+            voronoi_ps[voronoi_idx][0], voronoi_ps[voronoi_idx][1], -delta_z / 2
         )
         p_dst = Point3(
             voronoi_ps[voronoi_idx + 1][0],
             voronoi_ps[voronoi_idx + 1][1],
-            (z_next - z) / 2,
+            delta_z / 2,
         )
-        dist = sqrt((p_src.x - p_dst.x) ** 2 + (p_src.y - p_dst.y) ** 2)
-        # print(dist)
-        mat = np.matrix(
-            ((1, 0, 0, 0), (0, 1, 0, 0), (0, 0, 1, 0), (0, 0, 0, 1))
+
+        translate_mat = np.matrix(
+            (
+                (1, 0, 0, -middle_p.x),
+                (0, 1, 0, -middle_p.y),
+                (0, 0, 1, 0),
+                (0, 0, 0, 1),
+            )
         ).reshape((4, 4))
-        angle_z = np.arctan2(p_src.x - p_dst.x, p_src.y - p_dst.y) + pi
-        # print(angle_z)
-        tangens_xy = (p_dst.z - p_src.z) / dist
-        # print(np.arctan2(height, dist))
+
+        angle_z = -np.arctan2(p_dst.y - p_src.y, p_dst.x - p_src.x)
         rot_mat = np.matrix(
             (
                 (cos(angle_z), -sin(angle_z), 0, 0),
@@ -187,54 +210,24 @@ def generate_stroke(
                 (0, 0, 0, 1),
             )
         ).reshape((4, 4))
+
+        dist_xy = sqrt((p_dst.x - p_src.x) ** 2 + (p_dst.y - p_src.y) ** 2)
+        tangent_xy = (p_dst.z - p_src.z) / dist_xy
         shear_mat = np.matrix(
-            ((1, 0, 0, 0), (0, 1, 0, 0), (0, tangens_xy, 1, 0), (0, 0, 0, 1))
+            ((1, 0, 0, 0), (0, 1, 0, 0), (tangent_xy, 0, 1, 0), (0, 0, 0, 1))
         ).reshape((4, 4))
+
+        mat = np.identity(4)
+        mat = np.matmul(translate_mat, mat)
         mat = np.matmul(rot_mat, mat)
         mat = np.matmul(shear_mat, mat)
         mat = np.matmul(np.linalg.inv(rot_mat), mat)
-        mmat = tuple(map(tuple, np.array(mat)))
+        mat = np.matmul(np.linalg.inv(translate_mat), mat)
 
-        def tf(x):
-            return translate(middle_p)(multmatrix(mmat)(translate(-middle_p)(x)))
-
-        # if i > 4:
-        #     continue
-        # pdb.set_trace()
-        # if i == 2:
-        #     obj += color([1, 0, 0])(multmatrix(mmat)(cube(100, center=True)))
-        # l_obj = line_module.line(p_src, p_dst, 4)
-        # obj += color([1, 0, 0])(multmatrix(line_mat)(translate(-middle_p)(l_obj)) + l_obj)
         prog = region_idx / len(regions)
         col = (prog, 1 - prog / 2, 1 - prog)
-        obj += up(z)(color(col)(tf(part_obj)))
-    # lines = [
-    #     vor.vertices[line] for line in vor.ridge_vertices if -1 not in line
-    # ]
-    #
-    # for line in lines:
-    #     obj += color([1, 0, 0])(up(30)(line_module.line(line[0], line[1], 4)))
-    # plt.figure(fig)
-    # vor.regions
-    # for i in :
-    #     spt_p =
-    #     spt_tg =
-    #     r = (0, 0, np.angle(spt_tg) * 180/np.pi)
-    #     print(r)
-    #     # pdb.set_trace()
-    #     obj += translate(spt_point_to_tuple_point(spt_p))(up(-10)(color([1, 0, 0])(rotate(r)(cube(5)))))
-
-    # s = [Point2(-1, -1), Point2(-1, 1), Point2(1, 1), Point2(1, -1)]
-    # # s = square(2)
-    # ps = [Point3(0, 0, 0), Point3(5, 5, 5), Point3(5, 10, 5)]
-    # # control_ps = []
-    # # for p in ps:
-    # #   control_ps.append(p)
-    # spline_ps = catmull_rom_points(ps)
-    # obj = sphere(0)
-    # # obj = extrude_along_path(shape_pts=s, path_pts=spline_ps)
-    # for p in spline_ps:
-    #   obj += translate((p.x, p.y, p.z))(sphere(0.2))
+        slope_z_t = t if 'slope_z' in t_purpose else 1
+        obj += up(z * slope_z_t)(color(col)(multmatrix(np.asarray(mat))(part_obj)))
 
     return obj
 
@@ -296,11 +289,19 @@ class Config:
             "pillar_end_distance"
         ]
         self.scale: float = config["scale"]
-        self.debug_voronoi: bool = config["debug_options"]["plot_voronoi"]
+        self.debug_enable_plot: bool = config["debug_options"]["enable_plot"]
+        self.debug_plot_medians: bool = config["debug_options"]["plot_medians"]
+        self.debug_plot_stroke: bool = config["debug_options"]["plot_stroke"]
+        self.debug_plot_voronoi: bool = config["debug_options"]["plot_voronoi"]
+        self.debug_plot_orig_medians: bool = config["debug_options"][
+            "plot_orig_medians"
+        ]
+        self.debug_plot_zoom: bool = config["debug_options"]["plot_zoom"]
         self.untilted_mode_bottom_margin: float = config["untilted_options"][
             "bottom_margin"
         ]
-
+        self.t: float = config.get("t", 1)
+        self.t_purpose: float = config.get("t_purpose")
 
 def generate(config_dict: dict):
     root_config = Config(config_dict)
@@ -390,6 +391,7 @@ def generate(config_dict: dict):
     # height_multiplier = height_per_stroke + distance_between_strokes - thickness
     medians_3d: Sequence[Sequence[Point3]] = []
     avg_part_stretch = root_config.stretch / root_config.parts_per_stroke_unit
+    stroke_z_t = root_config.t if 'stroke_z' in root_config.t_purpose else 1
     stroke_zs = np.cumsum(
         [0]
         + [
@@ -398,7 +400,7 @@ def generate(config_dict: dict):
                 if root_config.flat_mode
                 else parts_count * avg_part_stretch
                 + root_config.distance_between_strokes
-            )
+            ) * stroke_z_t
             for (
                 i,
                 (
@@ -412,11 +414,20 @@ def generate(config_dict: dict):
     )
 
     plot_axes: list[SubplotBase] = None
-    if root_config.debug_voronoi:
+    if root_config.debug_enable_plot:
         n_strokes = len(stroke_paths_medians_lengths_counts)
         nrows = 2 if n_strokes <= 6 else 3
         ncols = ceil(n_strokes / nrows)
-        _fig, axes_grid = plt.subplots(nrows=nrows, ncols=ncols)
+        plt.rcParams["font.family"] = "Noto Sans SC"
+        fig, axes_grid = plt.subplots(
+            nrows=nrows, ncols=ncols, subplot_kw={"aspect": "equal"}
+        )
+        fig.canvas.manager.set_window_title(
+            f"3D Hanzi Generator - Plot {root_config.character}"
+        )
+        plt.suptitle(f"Character: {root_config.character}").set_size(
+            20
+        )  # , fontproperties=font_properties)
         plot_axes = flat(axes_grid)
 
     # plot_axes = [fig.add_subplot() for i in enumerate(stroke_paths_medians_lengths_counts)]
@@ -426,7 +437,7 @@ def generate(config_dict: dict):
     ):
         stroke_config = stroke_configs[i]
         part_z_fn = lambda i, l: i * avg_part_stretch
-        plot_ax = plot_axes[i] if stroke_config.debug_voronoi else None
+        plot_ax = plot_axes[i] if stroke_config.debug_enable_plot else None
         extrude_thickness = (
             5000 if root_config.to_bottom_mode else stroke_config.thickness
         )
@@ -436,11 +447,18 @@ def generate(config_dict: dict):
             part_z_fn,
             stroke_config.thickness,
             extrude_thickness,
-            stroke_config.debug_voronoi,
-            plot_ax,
             stroke_config.part_offset,
+            debug_plot_ax=plot_ax,
+            debug_enable_plot=stroke_config.debug_enable_plot,
+            debug_plot_voronoi=stroke_config.debug_plot_voronoi,
+            debug_plot_stroke=stroke_config.debug_plot_stroke,
+            debug_plot_medians=stroke_config.debug_plot_medians,
+            debug_plot_zoom=stroke_config.debug_plot_zoom,
+            stroke_index=i,
+            t=stroke_config.t,
+            t_purpose=stroke_config.t_purpose
         )
-        if stroke_config.debug_voronoi:
+        if stroke_config.debug_plot_orig_medians:
             xs, ys = zip(*orig_stroke_medians[i])
             plot_ax.plot(xs, ys, "ro", markersize=2)
         stroke_z = stroke_zs[i] + stroke_config.thickness / 2
@@ -458,7 +476,7 @@ def generate(config_dict: dict):
         )
         strokes += up(stroke_z)(stroke_obj)
 
-    if root_config.debug_voronoi:
+    if root_config.debug_enable_plot:
         plt.tight_layout()
         plt.show()
 
@@ -489,6 +507,11 @@ def generate(config_dict: dict):
         # make sure z doesnt have an effect on x and y
         eigenvectors[0][2] = 0
         eigenvectors[1][2] = 0
+        # make sure there's no rotation around z
+        eigenvectors[0][0] = 1
+        eigenvectors[0][1] = 0
+        eigenvectors[1][0] = 0
+        eigenvectors[1][1] = 1
         print(eigenvectors)
         # eigenvectors[2] = [0, 0, 1]
 
@@ -496,16 +519,21 @@ def generate(config_dict: dict):
 
         # make sure all eigenvectors are in the same direction as the current axis
         for i in range(3):
-            # for Z, if 0, 0, 1 would map to *, *, < 0, then invert it
+            # e.g. for Z, if 0, 0, 1 would map to *, *, < 0, then invert it
             if eigenvectors[i][i] < 0:
                 print(f"inverting {i} eigenvectors")
                 eigenvectors[i] = -eigenvectors[i]
         mat = [(*values, 0) for values in eigenvectors]
         print(mat)
 
-        if enable_untilted_axis:
+        if root_config.enable_untilted_axis:
             for i, eigenvector in enumerate(eigenvectors):
-                c = "red" if i == 0 else ("green" if i == 1 else "blue")
+                c = ("red", "green", "blue")[i]
+                debug += color(c)(
+                    line_module.line((0, 0, 0), Point3(*eigenvector) * 200, 20)
+                )
+            for i, eigenvector in enumerate(eigenvectors):
+                c = ("pink", "lightgreen", "lightblue")[i]
                 debug += multmatrix(mat)(
                     color(c)(
                         line_module.line((0, 0, 0), Point3(*eigenvector) * 200, 20)
@@ -513,18 +541,6 @@ def generate(config_dict: dict):
                 )
 
         strokes = multmatrix(mat)(strokes)
-
-        # obj += color('blue')(sphere(30))
-        # mat = np.matmul(mat, [[1, 0, 0, 0], [0, 1, 0, 0], [0.3, 0, 1, 0], [0, 0, 0, 1]])
-
-        if root_config.enable_untilted_axis:
-            for i, eigenvector in enumerate(eigenvectors):
-                c = "pink" if i == 0 else ("lightgreen" if i == 1 else "lightblue")
-                debug += multmatrix(mat)(
-                    color(c)(
-                        line_module.line((0, 0, 0), Point3(*eigenvector) * 200, 20)
-                    )
-                )
 
         medians_3d: Sequence[Sequence[Point3]] = [
             [Point3(*np.matmul(eigenvectors, np.array(median))) for median in medians]
@@ -679,6 +695,8 @@ if __name__ == "__main__":
     )
     parser.add_argument("--settings", help="Settings preset (.yaml file)", type=str)
     parser.add_argument("--scale", help="Scale the model", type=float)
+    parser.add_argument("--t", help="For animations", type=float)
+    parser.add_argument("--t-purpose", help="For animations (stroke_z,slope_z,shear)", type=str)
     args = parser.parse_args()
 
     out_dir = args.out_dir if args.out_dir is not None else "."
@@ -703,6 +721,9 @@ if __name__ == "__main__":
 
     if args.scale is not None:
         config["scale"] = args.scale
+
+    config["t"] = args.t if args.t != None else 1
+    config["t_purpose"] = args.t_purpose.split(",") if args.t_purpose != None else ()
 
     a = generate(config)
 

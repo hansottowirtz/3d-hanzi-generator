@@ -1,0 +1,24 @@
+character: 好
+parts:
+  - strokes
+flat_mode: true
+enable_pillars: false
+enable_plate: false
+to_bottom_mode: true
+
+debug_options:
+  enable_plot: false
+  plot_medians: true
+  plot_stroke: true
+  plot_voronoi: true
+  # plot_orig_medians: true
+
+general_options:
+  parts_per_stroke_unit: 14
+  distance_between_parts: 1
+  distance_between_strokes: 0
+  thickness: 90
+  stretch: 160
+
+flat_mode_options:
+  spacing: 7
