@@ -15,7 +15,7 @@ enable_pillars: false
 # Draw a round plate underneath the structure
 enable_plate: false
 # Space the heads of each stroke evenly
-flat_mode: false
+flat_mode: true
 # Extrude the strokes to the plate
 to_bottom_mode: false
 # Calculate average tilt and undo it
@@ -23,7 +23,7 @@ untilted_mode: false
 
 general_options:
   # How many parts to divide a stroke unit in
-  parts_per_stroke_unit: 15
+  parts_per_stroke_unit: 20
   # When not in flat mode, Z distance between head and tail of strokes
   distance_between_strokes: 0
   # Extrusion height of each stroke
@@ -34,8 +34,13 @@ general_options:
   # 'average_medians' recalculates the center
   centering_method: "box"
   # Smoothen the curve to improve splitting into parts
-  smoothen_curve: false
-  smoothen_curve_smoothness: 10
+  smoothen_curve: true
+  # How much to smoothen the curve
+  smoothen_curve_iterations: 10
+  # Smoothen the surface by averaging the shear
+  smoothen_surface: true
+  # How many previous parts to remember for averaging the shear
+  smoothen_surface_amount: 5
   # Ensure overlap between parts for 3d model
   part_offset: 1
 

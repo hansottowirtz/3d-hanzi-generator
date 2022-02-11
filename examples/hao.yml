@@ -1,10 +1,6 @@
 character: 好
 parts:
   - strokes
-flat_mode: true
-enable_pillars: false
-enable_plate: false
-# to_bottom_mode: true
 
 debug_options:
   enable_plot: true
@@ -15,11 +11,10 @@ debug_options:
 
 general_options:
   parts_per_stroke_unit: 20
-  distance_between_parts: 1
   distance_between_strokes: 0
   thickness: 90
   stretch: 300
-  smoothen_curve: true
+  smooth_surface_amount: 10
 
 flat_mode_options:
   spacing: 7
