@@ -124,7 +124,7 @@ def generate_stroke(
 
     obj = union()
 
-    def smoothen_curve_special(points: Sequence[Tuple[float, float]], **kwargs):
+    def smoothen_curve_special(points: Sequence[Tuple[float, float]], multiplier: float, **kwargs):
         pink_ps = [points[0]]
         mag_rolling_average_count = 1
         prev_mags = deque([], mag_rolling_average_count)
@@ -143,7 +143,7 @@ def generate_stroke(
             # if (pi - 0.2 < abs(angle) < pi + 0.2):
             #     continue
             # angle = angle % 2 * pi
-            new_mag = 1 * (1 - 1 * sqrt(1 + abs(abs((angle % (2 * pi))*180/pi) - 180)))
+            new_mag = multiplier * (1 - 1 * sqrt(1 + abs(abs((angle % (2 * pi))*180/pi) - 180)))
             if abs(new_mag) < 1:
                 # continue
                 new_mag = 0
@@ -213,9 +213,9 @@ def generate_stroke(
     if smoothen_curve:
         num_iterations = 10
         for i in range(num_iterations):
-            org_voronoi_ps = smoothen_curve_special(org_voronoi_ps, plot=(debug_enable_plot and (i==num_iterations-1)))
+            org_voronoi_ps = smoothen_curve_special(org_voronoi_ps, 1, plot=(debug_enable_plot and (i==num_iterations-1)))
 
-        interpolate_num_points = ceil(len(part_medians) / 1)
+        interpolate_num_points = len(part_medians)
         org_voronoi_ps = interpolate_equidistant_medians(org_voronoi_ps, interpolate_num_points)
 
     # create boundaries for voronoi regions (ensure all regions within the 1024x1024 square are finite)
@@ -256,6 +256,9 @@ def generate_stroke(
         for (k, region) in regions.items()
         if not (-1 in region or len(region) == 0)
     }
+
+    moving_average_num_parts = 4
+    mat_data: deque[Tuple[np.ndarray, float]] = deque([], moving_average_num_parts)
     for (region_idx, (voronoi_idx, region)) in enumerate(regions.items()):
         # if (region_idx % 2 == 0):
         #     continue
@@ -307,17 +310,25 @@ def generate_stroke(
             )
         ).reshape((4, 4))
 
-        dist_xy = sqrt((p_dst.x - p_src.x) ** 2 + (p_dst.y - p_src.y) ** 2)
-        tangent_xy = (p_dst.z - p_src.z) / dist_xy
-        shear_mat = np.matrix(
-            ((1, 0, 0, 0), (0, 1, 0, 0), (tangent_xy, 0, 1, 0), (0, 0, 0, 1))
-        ).reshape((4, 4))
+        dist_xy: float = sqrt((p_dst.x - p_src.x) ** 2 + (p_dst.y - p_src.y) ** 2)
+        tangent_xy: float = (p_dst.z - p_src.z) / dist_xy
+
+        mat_data.append((rot_mat, tangent_xy))
+        mat_data_list = list(mat_data)
+        len_mat_data = len(mat_data_list)
 
         mat = np.identity(4)
         mat = np.matmul(translate_mat, mat)
-        mat = np.matmul(rot_mat, mat)
-        mat = np.matmul(shear_mat, mat)
-        mat = np.matmul(np.linalg.inv(rot_mat), mat)
+
+        for (rot_mat, saved_tangent_xy) in mat_data_list:
+            tangent_xy = saved_tangent_xy/len_mat_data
+            shear_mat = np.matrix(
+                ((1, 0, 0, 0), (0, 1, 0, 0), (tangent_xy, 0, 1, 0), (0, 0, 0, 1))
+            ).reshape((4, 4))
+            mat = np.matmul(rot_mat, mat)
+            mat = np.matmul(shear_mat, mat)
+            mat = np.matmul(np.linalg.inv(rot_mat), mat)
+
         mat = np.matmul(np.linalg.inv(translate_mat), mat)
 
         prog = region_idx / len(regions)

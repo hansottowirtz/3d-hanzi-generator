@@ -4,7 +4,7 @@ parts:
 flat_mode: true
 enable_pillars: false
 enable_plate: false
-to_bottom_mode: true
+# to_bottom_mode: true
 
 debug_options:
   enable_plot: true
