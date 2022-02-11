@@ -125,7 +125,8 @@ def generate_stroke(
     obj = union()
 
     def smoothen_curve_special(points: Sequence[Tuple[float, float]], multiplier: float, **kwargs):
-        pink_ps = [points[0]]
+        # initialize result points with first point
+        result_ps = [points[0]]
         mag_rolling_average_count = 1
         prev_mags = deque([], mag_rolling_average_count)
 
@@ -137,77 +138,48 @@ def generate_stroke(
             p2 = points[idx+1]
             angle1 = ((2*pi) - np.arctan2(p0[1] - p1[1], p0[0] - p1[0])) % (2*pi)
             angle2 = ((2*pi) - np.arctan2(p2[1] - p1[1], p2[0] - p1[0])) % (2*pi)
-            # angle = angle2 - angle1
             angle = angle2 - angle1 if angle1 <= angle2 else 2 * pi - (angle1 - angle2)
-
-            # if (pi - 0.2 < abs(angle) < pi + 0.2):
-            #     continue
-            # angle = angle % 2 * pi
             new_mag = multiplier * (1 - 1 * sqrt(1 + abs(abs((angle % (2 * pi))*180/pi) - 180)))
             if abs(new_mag) < 1:
-                # continue
                 new_mag = 0
-            # if mag < 8:
-            #     continue
+
             prev_mags.append(new_mag)
             print(list(prev_mags))
             mag = np.average(list(prev_mags))
 
-            circle1 = plt.Circle(p1, mag, edgecolor="orange", linewidth=1, fill=False)
-            # debug_plot_ax.add_patch(circle1)
             if angle1 > pi:
                 angle1 -= 2*pi
             if angle2 > pi:
                 angle2 -= 2*pi
             if kwargs['plot']:
+                circle1 = plt.Circle(p1, mag, edgecolor="orange", linewidth=1, fill=False)
+                debug_plot_ax.add_patch(circle1)
                 debug_plot_ax.text(p1[0], p1[1], '%d' % (mag))
-            # middleangle = (angle2 + angle1)/2
+
+            # calculate the bisecting angle
             middleangle = angle1 + angle/2
-            # if angle2 > angle1:
-            #    middleangle += pi
-            # p2[1] > p0[1]
 
-            # sumthing = (p1[1] - p0[1])*(p2[0] - p1[0]) + (p1[0] - p0[0])*(p2[1] - p1[1])
-
-            # if p2[1] > p0[1] and p2[0] > p0[0]:
-            #    middleangle += pi
-
-            # slope1 = -(p1[1] - p0[1])/(p1[0] - p0[0])
-            # slope2 = -(p2[1] - p1[1])/(p2[0] - p1[0])
-
+            # translate points so p1 is the origin
             v1 = ((p0[0] - p1[0]), (p0[1] - p1[1]))
             v2 = ((p2[0] - p1[0]), (p2[1] - p1[1]))
 
-            d = v1[0] * v2[1] - v2[0] * v1[1] # dot product?
+            d = v1[0] * v2[1] - v2[0] * v1[1] # cross product to determine CW or CCW
 
             if d < 0:
                 middleangle += pi
-
-            # debugvalue = f'{slope2 - slope1}'
-            # debugvalue = ",".join(('%.2f' % (slope1), '%.2f' % (slope2), '%d' % (d)))
-            # debugvalue = ",".join(('%d' % (angle*180/pi), '%d' % (angle1*180/pi), '%d' % (angle2*180/pi), '%d' % (middleangle*180/pi), '%d' % sumthing))
-
-            # debug_plot_ax.text(p1[0], p1[1], debugvalue)
-            # if (p2[1] > p0[1]) ^ (p2[0] > p0[0]):
-            #    middleangle += pi
-
-            # middleangle = 0
-            # middleangle = (angle2 + angle1)/2
             dx = np.cos(middleangle) * mag
             dy = -np.sin(middleangle) * mag
-            pink_p = (p1[0] + dx, p1[1] + dy)
+            result_p = (p1[0] + dx, p1[1] + dy)
 
             if kwargs['plot']:
-                circle2 = plt.Circle(pink_p, 6, color="magenta")
+                circle2 = plt.Circle(result_p, 6, color="magenta")
                 debug_plot_ax.add_patch(circle2)
 
-            pink_ps += [pink_p]
-            # print(angle)
-        pink_ps += [points[-1]]
-        return pink_ps
-        # pink_ps = smoothen_points_curve(pink_ps)
-        # interpolate_num_points = len(part_medians)
+            result_ps += [result_p]
 
+        # add last point to results
+        result_ps += [points[-1]]
+        return result_ps
 
     org_voronoi_ps = part_medians
     if smoothen_curve:
