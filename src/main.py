@@ -11,6 +11,7 @@ from solid.objects import (
     union,
 )
 from math import ceil, cos, floor, sin, pi
+from collections import deque
 
 from euclid3 import Point2, Point3
 
@@ -27,7 +28,7 @@ from solid.utils import (
     down,
     up,
 )
-from solid.splines import catmull_rom_points
+from solid.splines import catmull_rom_points, bezier_points
 from euclid3 import Point3, Point2
 from subprocess import run
 from svgpathtools import parse_path, Path
@@ -99,6 +100,7 @@ def generate_stroke(
     thickness: float,
     extrude_thickness: float,
     part_offset: float,
+    smoothen_curve: bool,
     **kwargs,
 ):
     debug_enable_plot: bool = kwargs.get("debug_enable_plot")
@@ -122,7 +124,100 @@ def generate_stroke(
 
     obj = union()
 
+    def smoothen_curve_special(points: Sequence[Tuple[float, float]], **kwargs):
+        pink_ps = [points[0]]
+        mag_rolling_average_count = 1
+        prev_mags = deque([], mag_rolling_average_count)
+
+        for idx in range(len(points)):
+            if idx == 0 or idx + 1 == len(points):
+                continue
+            p0 = points[idx-1]
+            p1 = points[idx]
+            p2 = points[idx+1]
+            angle1 = ((2*pi) - np.arctan2(p0[1] - p1[1], p0[0] - p1[0])) % (2*pi)
+            angle2 = ((2*pi) - np.arctan2(p2[1] - p1[1], p2[0] - p1[0])) % (2*pi)
+            # angle = angle2 - angle1
+            angle = angle2 - angle1 if angle1 <= angle2 else 2 * pi - (angle1 - angle2)
+
+            # if (pi - 0.2 < abs(angle) < pi + 0.2):
+            #     continue
+            # angle = angle % 2 * pi
+            new_mag = 1 * (1 - 1 * sqrt(1 + abs(abs((angle % (2 * pi))*180/pi) - 180)))
+            if abs(new_mag) < 1:
+                # continue
+                new_mag = 0
+            # if mag < 8:
+            #     continue
+            prev_mags.append(new_mag)
+            print(list(prev_mags))
+            mag = np.average(list(prev_mags))
+
+            circle1 = plt.Circle(p1, mag, edgecolor="orange", linewidth=1, fill=False)
+            # debug_plot_ax.add_patch(circle1)
+            if angle1 > pi:
+                angle1 -= 2*pi
+            if angle2 > pi:
+                angle2 -= 2*pi
+            if kwargs['plot']:
+                debug_plot_ax.text(p1[0], p1[1], '%d' % (mag))
+            # middleangle = (angle2 + angle1)/2
+            middleangle = angle1 + angle/2
+            # if angle2 > angle1:
+            #    middleangle += pi
+            # p2[1] > p0[1]
+
+            # sumthing = (p1[1] - p0[1])*(p2[0] - p1[0]) + (p1[0] - p0[0])*(p2[1] - p1[1])
+
+            # if p2[1] > p0[1] and p2[0] > p0[0]:
+            #    middleangle += pi
+
+            # slope1 = -(p1[1] - p0[1])/(p1[0] - p0[0])
+            # slope2 = -(p2[1] - p1[1])/(p2[0] - p1[0])
+
+            v1 = ((p0[0] - p1[0]), (p0[1] - p1[1]))
+            v2 = ((p2[0] - p1[0]), (p2[1] - p1[1]))
+
+            d = v1[0] * v2[1] - v2[0] * v1[1] # dot product?
+
+            if d < 0:
+                middleangle += pi
+
+            # debugvalue = f'{slope2 - slope1}'
+            # debugvalue = ",".join(('%.2f' % (slope1), '%.2f' % (slope2), '%d' % (d)))
+            # debugvalue = ",".join(('%d' % (angle*180/pi), '%d' % (angle1*180/pi), '%d' % (angle2*180/pi), '%d' % (middleangle*180/pi), '%d' % sumthing))
+
+            # debug_plot_ax.text(p1[0], p1[1], debugvalue)
+            # if (p2[1] > p0[1]) ^ (p2[0] > p0[0]):
+            #    middleangle += pi
+
+            # middleangle = 0
+            # middleangle = (angle2 + angle1)/2
+            dx = np.cos(middleangle) * mag
+            dy = -np.sin(middleangle) * mag
+            pink_p = (p1[0] + dx, p1[1] + dy)
+
+            if kwargs['plot']:
+                circle2 = plt.Circle(pink_p, 6, color="magenta")
+                debug_plot_ax.add_patch(circle2)
+
+            pink_ps += [pink_p]
+            # print(angle)
+        pink_ps += [points[-1]]
+        return pink_ps
+        # pink_ps = smoothen_points_curve(pink_ps)
+        # interpolate_num_points = len(part_medians)
+
+
     org_voronoi_ps = part_medians
+    if smoothen_curve:
+        num_iterations = 10
+        for i in range(num_iterations):
+            org_voronoi_ps = smoothen_curve_special(org_voronoi_ps, plot=(debug_enable_plot and (i==num_iterations-1)))
+
+        interpolate_num_points = ceil(len(part_medians) / 1)
+        org_voronoi_ps = interpolate_equidistant_medians(org_voronoi_ps, interpolate_num_points)
+
     # create boundaries for voronoi regions (ensure all regions within the 1024x1024 square are finite)
     voronoi_ps = [
         (-1536, -1536),
@@ -132,6 +227,7 @@ def generate_stroke(
         *org_voronoi_ps,
     ]
     vor = Voronoi(voronoi_ps)
+
     if debug_enable_plot:
         if debug_plot_voronoi:
             voronoi_plot_2d(vor, ax=debug_plot_ax)
@@ -236,7 +332,7 @@ def flat(arr: Sequence[Sequence[Any]]):
     return [item for sublist in arr for item in sublist]
 
 
-def smoothen_curve(points: Sequence[Tuple[float, float]]):
+def smoothen_points_curve(points: Sequence[Tuple[float, float]]):
     points_3d = catmull_rom_points(points)
     points = [(p.x, p.y) for p in points_3d]
     return points
@@ -251,7 +347,7 @@ class Config:
         self.parts_per_stroke_unit: float = config["general_options"][
             "parts_per_stroke_unit"
         ]
-        self.config_smoothen_curve: bool = config["general_options"]["smoothen_curve"]
+        self.smoothen_curve: bool = config["general_options"]["smoothen_curve"]
         self.smoothen_curve_smoothness: float = config["general_options"][
             "smoothen_curve_smoothness"
         ]
@@ -351,22 +447,22 @@ def generate(config_dict: dict):
     ]
 
     # simplify curve by removing points, then smoothen resulting curve
-    if root_config.config_smoothen_curve:
-        stroke_medians = [
-            smoothen_curve(
-                interpolate_equidistant_medians(
-                    stroke_medians[i],
-                    max(
-                        ceil(
-                            stroke_lengths[i]
-                            / (root_config.smoothen_curve_smoothness * 50)
-                        ),
-                        3,
-                    ),
-                )
-            )
-            for i in range(len(stroke_medians))
-        ]
+    # if root_config.config_smoothen_curve:
+    #     stroke_medians = [
+    #         smoothen_curve(
+    #             interpolate_equidistant_medians(
+    #                 stroke_medians[i],
+    #                 max(
+    #                     ceil(
+    #                         stroke_lengths[i]
+    #                         / (root_config.smoothen_curve_smoothness * 50)
+    #                     ),
+    #                     3,
+    #                 ),
+    #             )
+    #         )
+    #         for i in range(len(stroke_medians))
+    #     ]
 
     stroke_medians = [
         interpolate_equidistant_medians(
@@ -448,6 +544,7 @@ def generate(config_dict: dict):
             stroke_config.thickness,
             extrude_thickness,
             stroke_config.part_offset,
+            stroke_config.smoothen_curve,
             debug_plot_ax=plot_ax,
             debug_enable_plot=stroke_config.debug_enable_plot,
             debug_plot_voronoi=stroke_config.debug_plot_voronoi,

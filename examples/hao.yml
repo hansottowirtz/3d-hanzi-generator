@@ -7,18 +7,19 @@ enable_plate: false
 to_bottom_mode: true
 
 debug_options:
-  enable_plot: false
+  enable_plot: true
   plot_medians: true
   plot_stroke: true
   plot_voronoi: true
   # plot_orig_medians: true
 
 general_options:
-  parts_per_stroke_unit: 14
+  parts_per_stroke_unit: 20
   distance_between_parts: 1
   distance_between_strokes: 0
   thickness: 90
-  stretch: 160
+  stretch: 300
+  smoothen_curve: true
 
 flat_mode_options:
   spacing: 7
