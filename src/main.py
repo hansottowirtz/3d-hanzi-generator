@@ -618,15 +618,6 @@ def generate(config_dict: dict):
         # make sure z doesnt have an effect on x and y
         eigenvectors[0][2] = 0
         eigenvectors[1][2] = 0
-        # make sure there's no rotation around z
-        eigenvectors[0][0] = 1
-        eigenvectors[0][1] = 0
-        eigenvectors[1][0] = 0
-        eigenvectors[1][1] = 1
-        # print(eigenvectors)
-        # eigenvectors[2] = [0, 0, 1]
-
-        print(np.matmul(np.array(eigenvectors), (0, 0, 1)))
 
         # make sure all eigenvectors are in the same direction as the current axis
         for i in range(3):
@@ -634,8 +625,14 @@ def generate(config_dict: dict):
             if eigenvectors[i][i] < 0:
                 print(f"inverting {i} eigenvectors")
                 eigenvectors[i] = -eigenvectors[i]
+
+        # make sure there's no rotation around z
+        eigenvectors[0][0] = 1
+        eigenvectors[0][1] = 0
+        eigenvectors[1][0] = 0
+        eigenvectors[1][1] = 1
+
         mat = [(*values, 0) for values in eigenvectors]
-        print(mat)
 
         if root_config.enable_untilted_axis:
             for i, eigenvector in enumerate(eigenvectors):
