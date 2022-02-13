@@ -54,6 +54,7 @@ config_merger = Merger(
     [(list, "override"), (dict, "merge"), (set, "union")], ["override"], ["override"]
 )
 
+PARTS_PER_STROKE_UNIT_MULTIPLIER = 1 / (0.5 * 1024)
 
 def spt_char_point_to_tuple_point(p):
     # move from weird spt box to 0-1024, then from 0-1024 to -512-512
@@ -164,7 +165,6 @@ def generate_stroke(
     smoothen_surface: bool,
     smoothen_surface_amount: int,
     stroke_extra_width: float,
-    parts_per_stroke_unit: int,
     **kwargs,
 ):
     debug_enable_plot: bool = kwargs.get("debug_enable_plot")
@@ -192,21 +192,48 @@ def generate_stroke(
 
     org_voronoi_ps = part_medians
     if smoothen_curve:
-        # TODO: if parts_per_stroke_unit is very high, it takes O(n^1.7) time, which is bad.
-        # we could interpolate with an intermediate number of points and then reinterpolate at the end
-        # but this doesn't really work with parts_per_stroke_unit so we first need to fix that
+        # if parts_per_stroke_unit is very high, it takes O(n^1.7) time, which is bad.
+        # we therefore interpolate with an intermediate number of points and then reinterpolate at the end.
+        # however this generates lower resolution (kinks in curve) which is noticeable,
+        # so we do extra iterations with all points at the end (non_intermediate_interations_count)
         interpolate_num_points = len(part_medians)
+        interpolate_num_points_intermediate = min(interpolate_num_points, 40)
+
+        stroke_length = calculate_stroke_length(part_medians)
+        parts_per_stroke_unit_approx = ceil(interpolate_num_points_intermediate/(stroke_length * PARTS_PER_STROKE_UNIT_MULTIPLIER))
+        # print(parts_per_stroke_unit_approx, parts_per_stroke_unit)
+        # part_medians = ceil(root_config.parts_per_stroke_unit * stroke_length / (0.5 * 1024))
+
         smoothen_curve_t = t if 'smoothen_curve' in t_purpose else 1
+
         # higher density means more iterations needed to achieve same curvature
         # empirically found that iterations *= (density ^ 1.7) ensures similar curvature
-        parts_per_stroke_unit_correction = (parts_per_stroke_unit ** 1.7) / 100
+        parts_per_stroke_unit_correction = (parts_per_stroke_unit_approx ** 1.7) / 100
         iterations_count = ceil(smoothen_curve_t * smoothen_curve_iterations * parts_per_stroke_unit_correction)
+        non_intermediate_interations_count = 10
+
+        if interpolate_num_points != interpolate_num_points_intermediate:
+            org_voronoi_ps = interpolate_equidistant_points(org_voronoi_ps, interpolate_num_points_intermediate)
+            iterations_count -= non_intermediate_interations_count
+
         for i in range(iterations_count):
             is_end = i==iterations_count-1
-            org_voronoi_ps = smoothen_curve_special(org_voronoi_ps, plot=(is_end and debug_enable_plot))
+            org_voronoi_ps = smoothen_curve_special(org_voronoi_ps, debug_plot_ax=(debug_plot_ax if is_end and debug_enable_plot else None))
             # interpolate at every step to avoid crossing points after multiple iterations
             # also there are just better results when doing it after every step
-            org_voronoi_ps = interpolate_equidistant_points(org_voronoi_ps, interpolate_num_points)
+            org_voronoi_ps = interpolate_equidistant_points(org_voronoi_ps, interpolate_num_points_intermediate)
+
+        if interpolate_num_points != interpolate_num_points_intermediate:
+            # interpolate_num_points_intermediate + (subdivisions * interpolate_num_points) = interpolate_num_points
+            number_of_intermediate_point_pairs = interpolate_num_points_intermediate - 1
+            missing_number_of_points = interpolate_num_points - interpolate_num_points_intermediate
+            subdivisions = ceil(missing_number_of_points / number_of_intermediate_point_pairs)
+            # you can still see the lower resolution, therefore smoothen the curve with catmull-rom smoothing
+            # and add 10 extra iterations (empirically found number)
+            org_voronoi_ps = smoothen_points_catmull_rom(org_voronoi_ps, subdivisions)
+            for i in range(non_intermediate_interations_count):
+                org_voronoi_ps = smoothen_curve_special(org_voronoi_ps)
+                org_voronoi_ps = interpolate_equidistant_points(org_voronoi_ps, interpolate_num_points)
 
     # create boundaries for voronoi regions (ensure all regions within the 1024x1024 square are finite)
     voronoi_ps = [
@@ -219,6 +246,9 @@ def generate_stroke(
     vor = Voronoi(voronoi_ps)
 
     if debug_enable_plot:
+        # if debug_plot_voronoi_points:
+            # xs_medians, ys_medians = zip(*voronoi_ps)
+            # debug_plot_ax.plot(xs_medians, ys_medians, "ro", markersize=2)
         if debug_plot_voronoi:
             voronoi_plot_2d(vor, ax=debug_plot_ax)
         if debug_plot_stroke:
@@ -338,8 +368,8 @@ def flat(arr: Sequence[Sequence[Any]]):
     return [item for sublist in ensure_iterable(arr) for item in ensure_iterable(sublist)]
 
 
-def smoothen_points_curve(points: Sequence[Tuple[float, float]]):
-    points_3d = catmull_rom_points(points)
+def smoothen_points_catmull_rom(points: Sequence[Tuple[float, float]], subdivisions: int = 10):
+    points_3d = catmull_rom_points(points, subdivisions)
     points = [(p.x, p.y) for p in points_3d]
     return points
 
@@ -455,10 +485,10 @@ def generate(config_dict: dict):
     stroke_lengths = [calculate_stroke_length(medians) for medians in stroke_medians]
 
     parts_per_stroke_unit_t = root_config.t if 'parts_per_stroke_unit' in root_config.t_purpose else 1
-    root_config.parts_per_stroke_unit = ceil(root_config.parts_per_stroke_unit * parts_per_stroke_unit_t)
+    root_config.parts_per_stroke_unit = root_config.parts_per_stroke_unit * parts_per_stroke_unit_t
 
     stroke_part_counts = [
-        ceil(root_config.parts_per_stroke_unit * stroke_length / (0.5 * 1024))
+        ceil(root_config.parts_per_stroke_unit * stroke_length * PARTS_PER_STROKE_UNIT_MULTIPLIER)
         for stroke_length in stroke_lengths
     ]
 
@@ -552,7 +582,6 @@ def generate(config_dict: dict):
             stroke_config.smoothen_surface,
             stroke_config.smoothen_surface_amount,
             stroke_config.stroke_extra_width,
-            stroke_config.parts_per_stroke_unit,
             debug_plot_ax=plot_ax,
             debug_enable_plot=stroke_config.debug_enable_plot,
             debug_plot_voronoi=stroke_config.debug_plot_voronoi,
