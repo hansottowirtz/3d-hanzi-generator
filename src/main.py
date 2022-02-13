@@ -161,9 +161,9 @@ def generate_stroke(
     extrude_thickness: float,
     part_offset: float,
     smoothen_curve: bool,
-    smoothen_curve_iterations: int,
+    smoothen_curve_amount: float,
     smoothen_surface: bool,
-    smoothen_surface_amount: int,
+    smoothen_surface_number_of_parts: int,
     stroke_extra_width: float,
     **kwargs,
 ):
@@ -201,15 +201,13 @@ def generate_stroke(
 
         stroke_length = calculate_stroke_length(part_medians)
         parts_per_stroke_unit_approx = ceil(interpolate_num_points_intermediate/(stroke_length * PARTS_PER_STROKE_UNIT_MULTIPLIER))
-        # print(parts_per_stroke_unit_approx, parts_per_stroke_unit)
-        # part_medians = ceil(root_config.parts_per_stroke_unit * stroke_length / (0.5 * 1024))
 
         smoothen_curve_t = t if 'smoothen_curve' in t_purpose else 1
 
         # higher density means more iterations needed to achieve same curvature
         # empirically found that iterations *= (density ^ 1.7) ensures similar curvature
-        parts_per_stroke_unit_correction = (parts_per_stroke_unit_approx ** 1.7) / 100
-        iterations_count = ceil(smoothen_curve_t * smoothen_curve_iterations * parts_per_stroke_unit_correction)
+        parts_per_stroke_unit_correction = (parts_per_stroke_unit_approx ** 1.7) / 10
+        iterations_count = ceil(smoothen_curve_t * smoothen_curve_amount * parts_per_stroke_unit_correction)
         non_intermediate_interations_count = 10
 
         if interpolate_num_points != interpolate_num_points_intermediate:
@@ -277,9 +275,7 @@ def generate_stroke(
         if not (-1 in region or len(region) == 0)
     }
 
-    smoothen_surface_amount = smoothen_surface_amount if smoothen_surface else 0
-    smoothen_surface_t = t if 'smoothen_surface' in t_purpose else 1
-    moving_average_num_parts = 1 + ceil(smoothen_surface_amount * smoothen_surface_t)
+    moving_average_num_parts = 1 + smoothen_surface_number_of_parts
     mat_data: deque[Tuple[np.ndarray, float]] = deque([], moving_average_num_parts)
     for (region_idx, (voronoi_idx, region)) in enumerate(regions.items()):
         # if (region_idx % 2 == 0):
@@ -384,11 +380,11 @@ class Config:
             "parts_per_stroke_unit"
         ]
         self.smoothen_curve: bool = config["general_options"]["smoothen_curve"]
-        self.smoothen_curve_iterations: int = config["general_options"][
-            "smoothen_curve_iterations"
+        self.smoothen_curve_amount: float = config["general_options"][
+            "smoothen_curve_amount"
         ]
         self.smoothen_surface: bool = config["general_options"]["smoothen_surface"]
-        self.smoothen_surface_amount: int = config["general_options"][
+        self.smoothen_surface_amount: float = config["general_options"][
             "smoothen_surface_amount"
         ]
         self.part_offset: float = config["general_options"]["part_offset"]
@@ -570,6 +566,10 @@ def generate(config_dict: dict):
         extrude_thickness = (
             5000 if root_config.to_bottom_mode else stroke_config.thickness
         )
+
+        smoothen_surface_t = stroke_config.t if 'smoothen_surface' in stroke_config.t_purpose else 1
+        smoothen_surface_number_of_parts = ceil(smoothen_surface_t * stroke_config.parts_per_stroke_unit / 5) if stroke_config.smoothen_surface else 0
+
         stroke_obj = generate_stroke(
             stroke_path,
             stroke_medians,
@@ -578,9 +578,9 @@ def generate(config_dict: dict):
             extrude_thickness,
             stroke_config.part_offset,
             stroke_config.smoothen_curve,
-            stroke_config.smoothen_curve_iterations,
+            stroke_config.smoothen_curve_amount,
             stroke_config.smoothen_surface,
-            stroke_config.smoothen_surface_amount,
+            smoothen_surface_number_of_parts,
             stroke_config.stroke_extra_width,
             debug_plot_ax=plot_ax,
             debug_enable_plot=stroke_config.debug_enable_plot,
