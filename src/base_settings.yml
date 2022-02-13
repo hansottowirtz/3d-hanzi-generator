@@ -43,6 +43,8 @@ general_options:
   smoothen_surface_amount: 5
   # Ensure overlap between parts for 3d model
   part_offset: 1
+  # Add extra width (a stroke) to the stroke
+  stroke_extra_width: 0
 
 untilted_options:
   # For untilting, bottom detection is not perfect yet, so adjust the margin here

@@ -163,6 +163,7 @@ def generate_stroke(
     smoothen_curve_iterations: int,
     smoothen_surface: bool,
     smoothen_surface_amount: int,
+    stroke_extra_width: float,
     **kwargs,
 ):
     debug_enable_plot: bool = kwargs.get("debug_enable_plot")
@@ -182,7 +183,7 @@ def generate_stroke(
         for i in np.linspace(0, 1, 4, endpoint=False):
             p = spt_char_point_to_tuple_point(segment.point(i))
             ps.append(p)
-    char_polygon = polygon(ps)
+    char_polygon = offset(stroke_extra_width)(polygon(ps))
 
     obj = union()
 
@@ -352,6 +353,7 @@ class Config:
             "smoothen_surface_amount"
         ]
         self.part_offset: float = config["general_options"]["part_offset"]
+        self.stroke_extra_width: float = config["general_options"]["stroke_extra_width"]
         self.flat_mode: bool = config["flat_mode"]
         self.flat_mode_spacing: float = config["flat_mode_options"]["spacing"]
         self.distance_between_strokes: float = config["general_options"][
@@ -552,6 +554,7 @@ def generate(config_dict: dict):
             stroke_config.smoothen_curve_iterations,
             stroke_config.smoothen_surface,
             stroke_config.smoothen_surface_amount,
+            stroke_config.stroke_extra_width,
             debug_plot_ax=plot_ax,
             debug_enable_plot=stroke_config.debug_enable_plot,
             debug_plot_voronoi=stroke_config.debug_plot_voronoi,
