@@ -388,6 +388,8 @@ class Config:
         ]
         self.scale: float = config["scale"]
         self.debug_enable_plot: bool = config["debug_options"]["enable_plot"]
+        self.debug_show_plot: bool = config["debug_options"]["show_plot"]
+        self.debug_plot_window_zoom: bool = config["debug_options"]["plot_window_zoom"]
         self.debug_plot_medians: bool = config["debug_options"]["plot_medians"]
         self.debug_plot_stroke: bool = config["debug_options"]["plot_stroke"]
         self.debug_plot_voronoi: bool = config["debug_options"]["plot_voronoi"]
@@ -522,6 +524,7 @@ def generate(config_dict: dict):
         fig, axes_grid = plt.subplots(
             nrows=nrows, ncols=ncols, subplot_kw={"aspect": "equal"}
         )
+        fig.set_size_inches(root_config.debug_plot_window_zoom * 750/80, root_config.debug_plot_window_zoom * 500/80)
         fig.canvas.manager.set_window_title(
             f"3D Hanzi Generator - Plot {root_config.character}"
         )
@@ -585,7 +588,8 @@ def generate(config_dict: dict):
 
     if root_config.debug_enable_plot:
         plt.tight_layout()
-        plt.show()
+        if root_config.debug_show_plot:
+            plt.show()
 
     if root_config.enable_connectors:
         for i, (medians1, medians2) in enumerate(pairwise(medians_3d)):
@@ -794,6 +798,7 @@ if __name__ == "__main__":
     parser.add_argument("--out-dir", help="Out dir", type=str)
     parser.add_argument("--out-scad", help="Out .scad file", type=str)
     parser.add_argument("--out-stl", help="Out .stl file", type=str)
+    parser.add_argument("--out-debug-plot", help="Out matplotlib (.png or .pdf) file", type=str)
     parser.add_argument("--stl", help="Stl or not", type=bool)
     parser.add_argument(
         "--parts",
@@ -832,8 +837,6 @@ if __name__ == "__main__":
     config["t"] = args.t if args.t != None else 1
     config["t_purpose"] = args.t_purpose.split(",") if args.t_purpose != None else ()
 
-    a = generate(config)
-
     header = "$fn = 40;"
     base_filename_parts = (
         config["character"],
@@ -851,10 +854,23 @@ if __name__ == "__main__":
         if args.out_stl is not None
         else out_dir + "/" + base_filename + ".stl"
     )
+    debug_plot_filepath = args.out_debug_plot
+
+    if debug_plot_filepath is not None:
+        config["debug_options"]["enable_plot"] = True
+        config["debug_options"]["show_plot"] = False
+
+    obj = generate(config)
+
     file_out = scad_render_to_file(
-        a, filepath=scad_filepath, file_header=header, include_orig_code=False
+        obj, filepath=scad_filepath, file_header=header, include_orig_code=False
     )
     print(f"SCAD file written to: \n{file_out}")
+
+    if plt is not None and debug_plot_filepath is not None:
+        plt.ioff()
+        plt.savefig(debug_plot_filepath, dpi=100)
+        print(f"Debug plot file written to: \n{debug_plot_filepath}")
 
     if args.stl:
         print("Generating stl (this might take a while)")

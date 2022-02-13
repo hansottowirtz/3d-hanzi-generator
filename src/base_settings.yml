@@ -88,6 +88,8 @@ pillar_options:
 
 debug_options:
   enable_plot: false
+  show_plot: true
+  plot_window_zoom: 1
   # Debug voronoi and strokes using matplotlib
   plot_voronoi: false
   plot_medians: false
