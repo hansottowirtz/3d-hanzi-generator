@@ -180,8 +180,10 @@ def generate_stroke(
     ps: Sequence[Point2] = []
 
     for segment in stroke_path:
-        # take 4 samples from each segment
-        for i in np.linspace(0, 1, 4, endpoint=False):
+        segment_length = segment.length()
+        sample_count = round(segment_length/5)
+        # take samples from each segment
+        for i in np.linspace(0, 1, sample_count, endpoint=False):
             p = spt_char_point_to_tuple_point(segment.point(i))
             ps.append(p)
     char_polygon = offset(stroke_extra_width)(polygon(ps))
@@ -738,7 +740,7 @@ def generate(config_dict: dict):
         r1 = 512
         r2 = 80
         plate += up(plate_z + root_config.plate_height / 2)(
-            cylinder(r=r1 + r2, h=root_config.plate_height, center=True)
+            cylinder(r=r1 + r2, h=root_config.plate_height, center=True, segments=100)
         )
 
     obj = cube(0)
