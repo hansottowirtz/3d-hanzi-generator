@@ -115,7 +115,7 @@ def smoothen_curve_special(points: Sequence[Tuple[float, float]], multiplier: fl
             new_mag = 0
 
         prev_mags.append(new_mag)
-        print(list(prev_mags))
+        # print(list(prev_mags))
         mag = np.average(list(prev_mags))
 
         if angle1 > pi:
@@ -476,7 +476,7 @@ def generate(config_dict: dict):
         for i in range(len(stroke_medians))
     ]
 
-    print(stroke_lengths, stroke_part_counts)
+    # print(stroke_lengths, stroke_part_counts)
     stroke_paths_medians_lengths_counts = [
         (
             parse_path(character_data["strokes"][i]),
