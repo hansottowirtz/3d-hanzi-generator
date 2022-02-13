@@ -92,7 +92,7 @@ def calculate_stroke_length(medians: Sequence[Tuple[int, int]]):
         sum += sqrt((m1[0] - m2[0]) ** 2 + (m1[1] - m2[1]) ** 2)
     return sum
 
-def smoothen_curve_special(points: Sequence[Tuple[float, float]], multiplier: float, **kwargs):
+def smoothen_curve_special(points: Sequence[Tuple[float, float]], **kwargs):
     # initialize result points with first point
     result_ps = [points[0]]
     mag_rolling_average_count = 1
@@ -100,22 +100,22 @@ def smoothen_curve_special(points: Sequence[Tuple[float, float]], multiplier: fl
 
     debug_plot_ax = kwargs.get('debug_plot_ax')
 
-    for idx in range(len(points)):
-        if idx == 0 or idx + 1 == len(points):
-            continue
+    for idx in range(1, len(points) - 1):
         p0 = points[idx-1]
-        p1 = points[idx]
+        p1 = points[idx] # middle point
         p2 = points[idx+1]
         angle1 = ((2*pi) - np.arctan2(p0[1] - p1[1], p0[0] - p1[0])) % (2*pi)
         angle2 = ((2*pi) - np.arctan2(p2[1] - p1[1], p2[0] - p1[0])) % (2*pi)
         angle = angle2 - angle1 if angle1 <= angle2 else 2 * pi - (angle1 - angle2)
         angle_deg = (angle % (2 * pi))*180/pi
+        # length needs to be taken into account to ensure algorithm always converges,
+        # otherwise resulting point might be placed too far from p1
+        total_dist = sqrt((p0[0] - p1[0]) ** 2 + (p0[1] - p1[1]) ** 2) + sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2)
+        # empirically found: when (magnitude *= distance/125) it always converges
+        multiplier = total_dist/125
         new_mag = multiplier * (1 - 1 * sqrt(1 + abs(abs(angle_deg) - 180)))
-        if abs(new_mag) < 1:
-            new_mag = 0
 
         prev_mags.append(new_mag)
-        # print(list(prev_mags))
         mag = np.average(list(prev_mags))
 
         if angle1 > pi:
@@ -164,6 +164,7 @@ def generate_stroke(
     smoothen_surface: bool,
     smoothen_surface_amount: int,
     stroke_extra_width: float,
+    parts_per_stroke_unit: int,
     **kwargs,
 ):
     debug_enable_plot: bool = kwargs.get("debug_enable_plot")
@@ -189,12 +190,18 @@ def generate_stroke(
 
     org_voronoi_ps = part_medians
     if smoothen_curve:
+        # TODO: if parts_per_stroke_unit is very high, it takes O(n^1.7) time, which is bad.
+        # we could interpolate with an intermediate number of points and then reinterpolate at the end
+        # but this doesn't really work with parts_per_stroke_unit so we first need to fix that
         interpolate_num_points = len(part_medians)
         smoothen_curve_t = t if 'smoothen_curve' in t_purpose else 1
-        iterations_count = ceil(smoothen_curve_t * smoothen_curve_iterations)
+        # higher density means more iterations needed to achieve same curvature
+        # empirically found that iterations *= (density ^ 1.7) ensures similar curvature
+        parts_per_stroke_unit_correction = (parts_per_stroke_unit ** 1.7) / 100
+        iterations_count = ceil(smoothen_curve_t * smoothen_curve_iterations * parts_per_stroke_unit_correction)
         for i in range(iterations_count):
             is_end = i==iterations_count-1
-            org_voronoi_ps = smoothen_curve_special(org_voronoi_ps, 1, plot=(is_end and debug_enable_plot))
+            org_voronoi_ps = smoothen_curve_special(org_voronoi_ps, plot=(is_end and debug_enable_plot))
             # interpolate at every step to avoid crossing points after multiple iterations
             # also there are just better results when doing it after every step
             org_voronoi_ps = interpolate_equidistant_points(org_voronoi_ps, interpolate_num_points)
@@ -445,28 +452,13 @@ def generate(config_dict: dict):
 
     stroke_lengths = [calculate_stroke_length(medians) for medians in stroke_medians]
 
+    parts_per_stroke_unit_t = root_config.t if 'parts_per_stroke_unit' in root_config.t_purpose else 1
+    root_config.parts_per_stroke_unit = ceil(root_config.parts_per_stroke_unit * parts_per_stroke_unit_t)
+
     stroke_part_counts = [
         ceil(root_config.parts_per_stroke_unit * stroke_length / (0.5 * 1024))
         for stroke_length in stroke_lengths
     ]
-
-    # simplify curve by removing points, then smoothen resulting curve
-    # if root_config.config_smoothen_curve:
-    #     stroke_medians = [
-    #         smoothen_curve(
-    #             interpolate_equidistant_medians(
-    #                 stroke_medians[i],
-    #                 max(
-    #                     ceil(
-    #                         stroke_lengths[i]
-    #                         / (root_config.smoothen_curve_smoothness * 50)
-    #                     ),
-    #                     3,
-    #                 ),
-    #             )
-    #         )
-    #         for i in range(len(stroke_medians))
-    #     ]
 
     stroke_medians = [
         interpolate_equidistant_points(
@@ -558,6 +550,7 @@ def generate(config_dict: dict):
             stroke_config.smoothen_surface,
             stroke_config.smoothen_surface_amount,
             stroke_config.stroke_extra_width,
+            stroke_config.parts_per_stroke_unit,
             debug_plot_ax=plot_ax,
             debug_enable_plot=stroke_config.debug_enable_plot,
             debug_plot_voronoi=stroke_config.debug_plot_voronoi,
