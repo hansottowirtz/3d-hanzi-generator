@@ -43,7 +43,7 @@ Scipy issue: https://github.com/scipy/scipy/issues/13409
 4. Split to objects (top menu)
 5. Export from PrusaSlicer as STL
 6. Import in Cura
-7. Use tree supports and raft to slice and print
+7. Use tree supports and raft to slice and print (preset available at [res/cura-preset.curaprofile](./res/cura-preset.curaprofile))
 
 ## Contributing
 
