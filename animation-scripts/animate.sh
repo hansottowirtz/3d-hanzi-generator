@@ -30,18 +30,18 @@ run_with_lock(){
     )&
 }
 
-N=8
+N=4
 open_sem $N
 
 task() {
   # sleep 0.5; echo "$1";
-  p=$(python -c "print('%05d' % ((10 + $1) * 1000))")
-  python src/main.py --out-scad $dir/model-$p.scad --settings examples/hao.yml --parts strokes --t $*
+  p=$(python -c "print('%07d' % ((10 + $1) * 1000))")
+  python src/main.py --out-scad $dir/model-$p.scad --out-debug-plot $dir/plot-$p.png --settings examples/hao.yml --parts strokes --t $*
   /Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD --imgsize 2048,2048 --autocenter --camera 60,-80,150,0,0,20 --colorscheme=Nature2 -o $dir/output-$p.png $dir/model-$p.scad
   # convert $dir/output-$p.png -trim $dir/output-$p.png;
 }
 
-for x in $(seq 0.0 0.02 1.02); do
+for x in $(seq 0.0 0.01 1.0); do
   run_with_lock task $x $@
 done
 wait
@@ -51,4 +51,10 @@ ffmpeg \
   -i "$dir/output-*.png" \
   -vf scale=2048:-1 \
   $dir/result.webm
-# convert -delay 20 -loop 0 $dir/output-*.png $dir/result.gif
+ffmpeg \
+  -framerate 20 \
+  -pattern_type glob \
+  -i "$dir/plot-*.png" \
+  -vf scale=2048:-1 \
+  $dir/plots.webm
+bash animation-scripts/merge-videos.sh $dir/plots.webm $dir/result.webm $dir/merged.webm

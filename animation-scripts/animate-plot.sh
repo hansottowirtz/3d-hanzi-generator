@@ -41,12 +41,12 @@ task() {
   # convert $dir/output-$p.png -trim $dir/output-$p.png;
 }
 
-for x in $(seq 0.0 0.1 1.6); do
+for x in $(seq 0.0 0.01 1.0); do
   run_with_lock task $x $@
 done
 wait
 ffmpeg \
-  -framerate 4 \
+  -framerate 20 \
   -pattern_type glob \
   -i "$dir/output-*.png" \
   -vf scale=2048:-1 \
