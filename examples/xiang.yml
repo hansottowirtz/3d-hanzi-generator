@@ -1,0 +1,15 @@
+character: 想
+parts:
+  - strokes
+
+untilted_mode: true
+to_bottom_mode: true
+
+general_options:
+  parts_per_stroke_unit: 80
+  distance_between_strokes: 0
+  thickness: 2
+  stretch: 100
+
+flat_mode_options:
+  spacing: 4

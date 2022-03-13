@@ -1,4 +1,4 @@
-character: 好
+character: 爱
 parts:
   - strokes
   - pillars
@@ -18,39 +18,42 @@ debug_options:
   plot_voronoi: true
   # plot_orig_medians: true
 
+scale: 1.4
+
 general_options:
   parts_per_stroke_unit: 80
   distance_between_strokes: 0
   thickness: 90
-  stretch: 200
+  stretch: 100
   # smoothen_surface_amount: 40
 
 flat_mode_options:
-  spacing: 7
+  spacing: 10
 
 pillar_options:
-  thickness: 17
-  insert_multiplier: 0.8
-  # insert_margin: 3
+  thickness: 14
+  insert_multiplier: 1
+  insert_n_segments: 20
+  # insert_margin:
   insert_angle: 0
-  pillar_end_distance: 0.4
+  plate_insertion: 0.2
 
 plate_options:
-  height: 25
+  height: 60
 
 per_stroke_options:
-  0:
-    pillar_options:
-      pillar_end_distance: 0.1
-  2:
-    pillar_options:
-      pillar_end_distance: 0.2
-  3:
-    pillar_options:
-      pillar_end_distance: 0.6
-  4:
-    pillar_options:
-      pillar_end_distance: 0.7
   5:
     pillar_options:
+      pillar_end_distance: 0.9
+  6:
+    pillar_options:
+      pillar_end_distance: 0.8
+  7:
+    pillar_options:
       pillar_end_distance: 0.7
+  8:
+    pillar_options:
+      pillar_end_distance: 0.3
+  9:
+    pillar_options:
+      pillar_end_distance: 0.75

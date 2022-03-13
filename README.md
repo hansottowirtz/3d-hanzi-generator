@@ -8,8 +8,10 @@ It does this by splitting up each stroke into parts following the stroke order, 
 
 ## Usage
 
+The input of the program is a .yml file containing the settings to generate the model.
+
 ```bash
-python src/main.py --character 福 --out-scad main.scad --stl true --out-stl main.stl --settings presets/pillars_and_plate.yml
+python src/main.py --out-scad main.scad --stl true --out-stl main.stl --settings examples/ai.yml --parts strokes
 ```
 
 See [src/base_settings.yml](./src/base_settings.yml) for all configuration options.

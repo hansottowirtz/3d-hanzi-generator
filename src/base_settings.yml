@@ -85,6 +85,8 @@ pillar_options:
   insert_multiplier: 1.2 # sqrt(2)
   # Distance to the head/tail of the stroke relative to the stroke length
   pillar_end_distance: 0.5
+  # How much the pillar will be in the plate (default: half)
+  plate_insertion: 0.5
 
 debug_options:
   enable_plot: false

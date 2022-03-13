@@ -55,6 +55,7 @@ config_merger = Merger(
 )
 
 PARTS_PER_STROKE_UNIT_MULTIPLIER = 1 / (0.5 * 1024)
+SCALE_MULTIPLIER = 60 / 1024
 
 def spt_char_point_to_tuple_point(p):
     # move from weird spt box to 0-1024, then from 0-1024 to -512-512
@@ -421,6 +422,9 @@ class Config:
         self.pillar_end_distance: float = config["pillar_options"][
             "pillar_end_distance"
         ]
+        self.pillar_plate_insertion: float = config["pillar_options"][
+            "plate_insertion"
+        ]
         self.scale: float = config["scale"]
         self.debug_enable_plot: bool = config["debug_options"]["enable_plot"]
         self.debug_show_plot: bool = config["debug_options"]["show_plot"]
@@ -470,6 +474,7 @@ def generate(config_dict: dict):
     plate = cube(0)
     pillars = cube(0)
     pillars_cutouts = cube(0)
+    pillars_without_inserts = cube(0)
     connectors = cube(0)
     debug = cube(0)
 
@@ -723,17 +728,20 @@ def generate(config_dict: dict):
             (stroke_config.thickness / 2) - insert_insertion,
         )
         pillar_cone_start_p = pillar_insert_end_p + (0, 0, insert_insertion + 5)
+        pillar_bottom_p_z = plate_z + (root_config.plate_height * (0.5 + root_config.pillar_plate_insertion))
         pillar = rod_module.line(
             pillar_cone_start_p,
-            (p.x, p.y, plate_z + root_config.plate_height / 2),
+            (p.x, p.y, pillar_bottom_p_z),
             stroke_config.pillar_thickness,
         )
+        pillars_without_inserts += pillar
         pillar += rod_module.cone(
             pillar_cone_start_p,
             pillar_insert_end_p,
             stroke_config.pillar_thickness,
             stroke_config.pillar_thickness / 2,
         )
+        print(f'Stroke {i} pillar length: {root_config.scale * SCALE_MULTIPLIER * (pillar_bottom_p_z - pillar_insert_end_p[2])}mm')
         insert_segment_count = stroke_config.pillar_insert_n_segments
         insert_angle = (
             angle + stroke_config.pillar_insert_angle - 30
@@ -771,6 +779,7 @@ def generate(config_dict: dict):
         plate += up(plate_z + root_config.plate_height / 2)(
             cylinder(r=r1 + r2, h=root_config.plate_height, center=True, segments=100)
         )
+        plate -= pillars_without_inserts
 
     obj = cube(0)
     for part in root_config.parts:
@@ -783,7 +792,7 @@ def generate(config_dict: dict):
         }[part]
         obj += part_obj
 
-    return scale(root_config.scale * 60 / 1024)(rotate((-180, 0, 0))(obj))
+    return scale(root_config.scale * SCALE_MULTIPLIER)(rotate((-180, 0, 0))(obj))
 
 
 def find_openscad():
