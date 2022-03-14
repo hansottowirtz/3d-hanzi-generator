@@ -6,6 +6,14 @@ This program generates a 3d model of a Hanzi/Kanji character using stroke data f
 
 It does this by splitting up each stroke into parts following the stroke order, and then skewing each part to form a slope.
 
+In this [blog post](https://dev.to/hansottowirtz/generating-sloping-3d-models-from-chinese-characters-opb) I go into detail about about the inner workings of this program. It uses SolidPython, OpenSCAD, Voronoi diagrams, PCA, and quite a lot of linear algebra.
+
+## Examples
+
+Watch [this YouTube video](https://www.youtube.com/watch?v=tn4bemVyHxs) to see some examples.
+
+<img alt="Example image 爱" width="300" src="./res/example-image.jpg"/>
+
 ## Usage
 
 The input of the program is a .yml file containing the settings to generate the model.
