@@ -904,4 +904,5 @@ if __name__ == "__main__":
 
     if args.stl:
         print("Generating stl (this might take a while)")
-        run([find_openscad(), "-o", stl_filepath, scad_filepath])
+        run([find_openscad(), "--enable=manifold", "-o", stl_filepath, scad_filepath])
+
