@@ -800,20 +800,27 @@ def find_openscad():
     import platform
     import os
 
-    p = ""
+    possibilities = []
     # Check if we find OpenSCAD
     plat = platform.system()
     if plat == "Darwin":
-        p = "/Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD"
+        possibilities.append("/Applications/OpenSCAD.app/Contents/MacOS/OpenSCAD")
+        possibilities.append("/opt/homebrew/bin/openscad")
     elif plat == "Linux":
-        p = "/usr/bin/openscad"
-    elif plat == "Windows":
-        p = ""
-    while not os.path.exists(p):
+        possibilities.append("/usr/bin/openscad")
+
+    final_p = None
+    for p in possibilities:
+        if os.path.exists(p):
+            final_p = p
+            break
+    if final_p is None:
         print("Unable to find OpenSCAD. You can manually provide a path.")
         p = input("OpenSCAD executable: ")
         if os.path.exists(p):
-            break
+            final_p = p
+        else:
+            raise Exception("OpenSCAD not found")
 
     return p
 
@@ -904,5 +911,5 @@ if __name__ == "__main__":
 
     if args.stl:
         print("Generating stl (this might take a while)")
-        run([find_openscad(), "--enable=manifold", "-o", stl_filepath, scad_filepath])
+        run([find_openscad(), "-o", stl_filepath, scad_filepath])
 
